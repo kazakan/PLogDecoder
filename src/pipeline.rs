@@ -142,7 +142,9 @@ fn run_analysis(
         line_buf.clear();
         match reader.read_line(&mut line_buf) {
             Err(e) => {
-                let _ = tx.send(AnalysisEvent::Warning(format!("IO error reading line: {e}")));
+                let _ = tx.send(AnalysisEvent::Warning(format!(
+                    "IO error reading line: {e}"
+                )));
                 // Continue — the next read may succeed.
             }
             Ok(0) => {
@@ -300,9 +302,7 @@ mod tests {
         )
         .unwrap();
         let events: Vec<_> = rx.into_iter().collect();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, AnalysisEvent::Error(_))));
+        assert!(events.iter().any(|e| matches!(e, AnalysisEvent::Error(_))));
     }
 
     /// Verify that the watch pipeline picks up lines appended after the initial
@@ -361,4 +361,3 @@ mod tests {
         assert_eq!(got[1].index, 1);
     }
 }
-

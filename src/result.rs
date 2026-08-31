@@ -42,8 +42,10 @@ impl Value {
                 format!("[{}]", parts.join(", "))
             }
             Value::Struct(m) => {
-                let parts: Vec<String> =
-                    m.iter().map(|(k, v)| format!("{}: {}", k, v.display())).collect();
+                let parts: Vec<String> = m
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.display()))
+                    .collect();
                 format!("{{{}}}", parts.join(", "))
             }
             Value::Null => "null".to_string(),

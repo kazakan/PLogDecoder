@@ -70,7 +70,9 @@ mod tests {
     #[test]
     fn matches_line() {
         let ext = Extractor::new(PATTERN).unwrap();
-        let pkt = ext.extract_from_line("2024-01-01 PACKET: deadbeef extra").unwrap();
+        let pkt = ext
+            .extract_from_line("2024-01-01 PACKET: deadbeef extra")
+            .unwrap();
         // Greedy match captures all hex+space chars up to 'x' in "extra"
         assert!(pkt.hex.starts_with("deadbeef"));
     }

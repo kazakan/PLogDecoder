@@ -22,7 +22,6 @@
 /// - Hex decoding uses a single nibble loop with no intermediate collections.
 /// - Packets are published to the receiver as they are decoded (incremental).
 /// - All heavy processing happens on a **background thread**.
-
 pub mod decoder;
 pub mod extractor;
 pub mod hex;

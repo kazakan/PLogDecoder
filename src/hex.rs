@@ -46,9 +46,7 @@ pub fn decode_bytes(input: &[u8]) -> Result<Vec<u8>, Error> {
     }
 
     if nibble.is_some() {
-        return Err(Error::HexDecode(
-            "odd number of hex digits".to_string(),
-        ));
+        return Err(Error::HexDecode("odd number of hex digits".to_string()));
     }
 
     Ok(out)
@@ -65,10 +63,7 @@ mod tests {
 
     #[test]
     fn with_spaces() {
-        assert_eq!(
-            decode("de ad be ef").unwrap(),
-            &[0xde, 0xad, 0xbe, 0xef]
-        );
+        assert_eq!(decode("de ad be ef").unwrap(), &[0xde, 0xad, 0xbe, 0xef]);
     }
 
     #[test]

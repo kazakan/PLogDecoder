@@ -7,7 +7,6 @@
 ///   1. hex::decode — small / medium / large / with-whitespace packets
 ///   2. Extractor (regex) — matching and non-matching lines
 ///   3. End-to-end pipeline — synthetic in-memory "log" written to a temp file
-
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use plog_core::extractor::Extractor;
 use plog_core::hex;
@@ -69,8 +68,7 @@ fn bench_extractor(c: &mut Criterion) {
     let pattern = r"PACKET: (?P<hex>[0-9a-fA-F ]+)";
     let extractor = Extractor::new(pattern).unwrap();
 
-    let matching_line =
-        "2024-01-01T12:00:00 [INFO] PACKET: deadbeef cafebabe 01020304 deadbeef";
+    let matching_line = "2024-01-01T12:00:00 [INFO] PACKET: deadbeef cafebabe 01020304 deadbeef";
     let non_matching_line = "2024-01-01T12:00:00 [INFO] some other log message here";
 
     let mut group = c.benchmark_group("extractor");
