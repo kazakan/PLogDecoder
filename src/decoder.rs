@@ -62,9 +62,9 @@ impl DecoderCache {
     /// good enough for cache invalidation purposes.
     pub fn get_or_prepare(&mut self, ksy_source: &str) -> Result<&Decoder, Error> {
         let key = fnv1a(ksy_source.as_bytes());
-        if !self.inner.contains_key(&key) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.inner.entry(key) {
             let decoder = prepare_decoder(ksy_source)?;
-            self.inner.insert(key, decoder);
+            e.insert(decoder);
         }
         Ok(self.inner.get(&key).unwrap())
     }
