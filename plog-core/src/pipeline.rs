@@ -246,6 +246,42 @@ fn reopen_or_seek(path: &Path, pos: u64) -> Result<BufReader<File>, std::io::Err
     Ok(BufReader::with_capacity(256 * 1024, file))
 }
 
+/// Analyze a text file as a single unit: every hex match found anywhere in
+/// the file is concatenated (in order) into one byte stream and decoded as
+/// a single packet.
+///
+/// Unlike [`start_analysis`], this runs synchronously on the calling thread
+/// and returns the result directly instead of a channel of events.
+pub fn analyze_text_whole(
+    path: impl AsRef<Path>,
+    config: AnalysisConfig,
+) -> Result<DecodedPacket, Error> {
+    let extractor = Extractor::new(&config.pattern)?;
+    let content = std::fs::read_to_string(path)?;
+
+    let mut bytes = Vec::new();
+    for raw in extractor.extract_all(&content) {
+        bytes.extend(hex::decode(raw.hex)?);
+    }
+
+    let mut cache = DecoderCache::new();
+    let decoder = cache.get_or_prepare(&config.ksy_source)?;
+    decoder.decode(0, bytes)
+}
+
+/// Analyze a binary file: its raw bytes are decoded directly (no hex
+/// extraction/regex step) into a single packet.
+pub fn analyze_binary(
+    path: impl AsRef<Path>,
+    ksy_source: &str,
+) -> Result<DecodedPacket, Error> {
+    let bytes = std::fs::read(path)?;
+
+    let mut cache = DecoderCache::new();
+    let decoder = cache.get_or_prepare(ksy_source)?;
+    decoder.decode(0, bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

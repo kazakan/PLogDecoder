@@ -1,13 +1,13 @@
 # CD — Continuous Delivery / Release
 #
 # Triggered when a PR labelled "release" is merged into main.
-# Reads the version from Cargo.toml, creates a Git tag (vX.Y.Z),
-# and publishes a GitHub Release with pre-built binaries.
+# Reads the version from plog-core/Cargo.toml, creates a Git tag (vX.Y.Z),
+# and publishes a GitHub Release with the pre-built plog/plog-gui binaries.
 #
 # Requirements:
 #   - The PR must carry the "release" label.
-#   - Cargo.toml [package].version must be bumped to the target version before
-#     merging.
+#   - plog-core/Cargo.toml [package].version must be bumped to the target
+#     version before merging.
 #   - The GITHUB_TOKEN secret is used automatically by the runner.
 
 name: CD
@@ -38,6 +38,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install GUI build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxi-dev libxkbcommon-dev \
+            libxrandr-dev libxcursor-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libssl-dev pkg-config
+
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -54,7 +61,7 @@ jobs:
       - name: Read version from Cargo.toml
         id: version
         run: |
-          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep -m1 '^version' plog-core/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "TAG=v${VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -82,7 +89,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.TAG }}
-          name: "plog-core ${{ steps.version.outputs.TAG }}"
+          name: "PLogDecoder ${{ steps.version.outputs.TAG }}"
           generate_release_notes: true
           files: |
-            target/release/libplog_core.rlib
+            target/release/plog
+            target/release/plog-gui

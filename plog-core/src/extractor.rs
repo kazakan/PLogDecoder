@@ -59,6 +59,23 @@ impl Extractor {
         };
         Some(RawPacket { hex: hex_str })
     }
+
+    /// Find every match in `text`, in order.
+    ///
+    /// Used for "whole file" analysis where the hex payload may be spread
+    /// across multiple matches within a single blob of text.
+    pub fn extract_all<'a>(&self, text: &'a str) -> Vec<RawPacket<'a>> {
+        self.re
+            .captures_iter(text)
+            .filter_map(|caps| {
+                let hex_str = match &self.capture_group {
+                    CaptureGroup::Named(name) => caps.name(name)?.as_str(),
+                    CaptureGroup::Index(i) => caps.get(*i)?.as_str(),
+                };
+                Some(RawPacket { hex: hex_str })
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
