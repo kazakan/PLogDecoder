@@ -126,8 +126,8 @@ impl App {
             Mode::Binary => {
                 let (tx, rx) = std::sync::mpsc::channel();
                 std::thread::spawn(move || {
-                    let result = pipeline::analyze_binary(&file, &ksy_source)
-                        .map_err(|e| e.to_string());
+                    let result =
+                        pipeline::analyze_binary(&file, &ksy_source).map_err(|e| e.to_string());
                     let _ = tx.send(result);
                 });
                 self.job = Some(Job::Once(rx));

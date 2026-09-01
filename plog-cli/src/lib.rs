@@ -134,7 +134,13 @@ mod tests {
     #[test]
     fn cli_parses_explicit_mode_and_watch() {
         let cli = Cli::try_parse_from([
-            "plog", "input.log", "--ksy", "schema.ksy", "--mode", "whole", "--watch",
+            "plog",
+            "input.log",
+            "--ksy",
+            "schema.ksy",
+            "--mode",
+            "whole",
+            "--watch",
         ])
         .unwrap();
         assert_eq!(cli.mode, Mode::Whole);
@@ -167,9 +173,12 @@ mod tests {
         let pkt = DecodedPacket {
             index: 3,
             raw_bytes: vec![0xde, 0xad],
-            fields: [("raw".to_string(), plog_core::result::Value::Bytes(vec![0xde, 0xad]))]
-                .into_iter()
-                .collect(),
+            fields: [(
+                "raw".to_string(),
+                plog_core::result::Value::Bytes(vec![0xde, 0xad]),
+            )]
+            .into_iter()
+            .collect(),
         };
         let text = format_packet(&pkt);
         assert!(text.contains("packet #3"));
@@ -219,7 +228,13 @@ mod tests {
             "PACKET: deadbeef\nnoise\nPACKET: cafebabe\n",
         );
 
-        let out = run_line(&path, r"PACKET: (?P<hex>[0-9a-fA-F ]+)", "name: test", false).unwrap();
+        let out = run_line(
+            &path,
+            r"PACKET: (?P<hex>[0-9a-fA-F ]+)",
+            "name: test",
+            false,
+        )
+        .unwrap();
         assert!(out.contains("packet #0"));
         assert!(out.contains("packet #1"));
         assert!(out.contains("done: 2 packet(s) found"));

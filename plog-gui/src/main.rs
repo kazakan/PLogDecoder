@@ -7,4 +7,3 @@ fn main() -> eframe::Result<()> {
         Box::new(|_cc| Ok(Box::new(App::default()))),
     )
 }
-

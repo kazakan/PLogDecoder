@@ -271,10 +271,7 @@ pub fn analyze_text_whole(
 
 /// Analyze a binary file: its raw bytes are decoded directly (no hex
 /// extraction/regex step) into a single packet.
-pub fn analyze_binary(
-    path: impl AsRef<Path>,
-    ksy_source: &str,
-) -> Result<DecodedPacket, Error> {
+pub fn analyze_binary(path: impl AsRef<Path>, ksy_source: &str) -> Result<DecodedPacket, Error> {
     let bytes = std::fs::read(path)?;
 
     let mut cache = DecoderCache::new();

@@ -114,11 +114,7 @@ fn missing_ksy_file_fails_with_error() {
     let log = write_file(dir.path(), "sample.log", "PACKET: deadbeef\n");
 
     let output = Command::new(plog_bin())
-        .args([
-            log.to_str().unwrap(),
-            "--ksy",
-            "does-not-exist.ksy",
-        ])
+        .args([log.to_str().unwrap(), "--ksy", "does-not-exist.ksy"])
         .output()
         .unwrap();
 
