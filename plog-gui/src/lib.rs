@@ -362,10 +362,12 @@ mod tests {
         let ksy = write_file(dir.path(), "schema.ksy", b"name: test\n");
         let bin = write_file(dir.path(), "sample.bin", &[0xde, 0xad, 0xbe, 0xef]);
 
-        let mut app = App::default();
-        app.file = Some(bin);
-        app.ksy = Some(ksy);
-        app.mode = Mode::Binary;
+        let mut app = App {
+            file: Some(bin),
+            ksy: Some(ksy),
+            mode: Mode::Binary,
+            ..Default::default()
+        };
 
         app.start();
         wait_until_idle(&mut app, Duration::from_secs(2));
@@ -384,11 +386,13 @@ mod tests {
             b"PACKET: deadbeef\nnoise\nPACKET: cafebabe\n",
         );
 
-        let mut app = App::default();
-        app.file = Some(log);
-        app.ksy = Some(ksy);
-        app.mode = Mode::Whole;
-        app.pattern = r"PACKET: (?P<hex>[0-9a-fA-F ]+)".to_string();
+        let mut app = App {
+            file: Some(log),
+            ksy: Some(ksy),
+            mode: Mode::Whole,
+            pattern: r"PACKET: (?P<hex>[0-9a-fA-F ]+)".to_string(),
+            ..Default::default()
+        };
 
         app.start();
         wait_until_idle(&mut app, Duration::from_secs(2));
@@ -410,11 +414,13 @@ mod tests {
             b"PACKET: deadbeef\nnoise\nPACKET: cafebabe\n",
         );
 
-        let mut app = App::default();
-        app.file = Some(log);
-        app.ksy = Some(ksy);
-        app.mode = Mode::Line;
-        app.pattern = r"PACKET: (?P<hex>[0-9a-fA-F ]+)".to_string();
+        let mut app = App {
+            file: Some(log),
+            ksy: Some(ksy),
+            mode: Mode::Line,
+            pattern: r"PACKET: (?P<hex>[0-9a-fA-F ]+)".to_string(),
+            ..Default::default()
+        };
 
         app.start();
         wait_until_idle(&mut app, Duration::from_secs(2));
@@ -431,9 +437,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let bin = write_file(dir.path(), "sample.bin", &[0x00, 0xde, 0xad]);
 
-        let mut app = App::default();
-        app.file = Some(bin);
-        app.mode = Mode::Auto;
+        let app = App {
+            file: Some(bin),
+            mode: Mode::Auto,
+            ..Default::default()
+        };
 
         assert_eq!(app.resolved_mode(), Mode::Binary);
     }
@@ -443,9 +451,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let bin = write_file(dir.path(), "sample.bin", &[0x01]);
 
-        let mut app = App::default();
-        app.file = Some(bin);
-        app.ksy = Some(dir.path().join("does-not-exist.ksy"));
+        let mut app = App {
+            file: Some(bin),
+            ksy: Some(dir.path().join("does-not-exist.ksy")),
+            ..Default::default()
+        };
 
         app.start();
         assert!(!app.is_busy());
