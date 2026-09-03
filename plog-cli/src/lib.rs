@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, ValueEnum};
@@ -57,33 +58,53 @@ pub fn resolve_mode(requested: Mode, detected: FileKind) -> Mode {
     }
 }
 
-/// Render a decoded packet the same way for both stdout and tests.
-pub fn format_packet(pkt: &DecodedPacket) -> String {
-    let mut out = format!(
-        "--- packet #{} ({} bytes) ---\n",
+/// Render a decoded packet directly to `out`, avoiding an intermediate
+/// `String` allocation per packet (matters when there are millions of them).
+pub fn write_packet(out: &mut impl Write, pkt: &DecodedPacket) -> std::io::Result<()> {
+    writeln!(
+        out,
+        "--- packet #{} ({} bytes) ---",
         pkt.index,
         pkt.raw_bytes.len()
-    );
-    let mut keys: Vec<&String> = pkt.fields.keys().collect();
-    keys.sort();
-    for key in keys {
-        out.push_str(&format!("{key}: {}\n", pkt.fields[key].display()));
+    )?;
+    for (key, value) in &pkt.fields {
+        writeln!(out, "{key}: {}", value.display())?;
     }
-    out
+    Ok(())
 }
 
-pub fn run_binary(file: &Path, ksy_source: &str) -> Result<String, plog_core::Error> {
+/// Render a decoded packet to a `String`. Convenience wrapper over
+/// [`write_packet`] for tests and small one-shot outputs.
+#[cfg(test)]
+fn format_packet(pkt: &DecodedPacket) -> String {
+    let mut buf = Vec::new();
+    write_packet(&mut buf, pkt).unwrap();
+    String::from_utf8(buf).unwrap()
+}
+
+pub fn run_binary(
+    file: &Path,
+    ksy_source: &str,
+    out: &mut impl Write,
+) -> Result<(), plog_core::Error> {
     let pkt = pipeline::analyze_binary(file, ksy_source)?;
-    Ok(format_packet(&pkt))
+    write_packet(out, &pkt)?;
+    Ok(())
 }
 
-pub fn run_whole(file: &Path, pattern: &str, ksy_source: &str) -> Result<String, plog_core::Error> {
+pub fn run_whole(
+    file: &Path,
+    pattern: &str,
+    ksy_source: &str,
+    out: &mut impl Write,
+) -> Result<(), plog_core::Error> {
     let config = AnalysisConfig {
         pattern: pattern.to_string(),
         ksy_source: ksy_source.to_string(),
     };
     let pkt = pipeline::analyze_text_whole(file, config)?;
-    Ok(format_packet(&pkt))
+    write_packet(out, &pkt)?;
+    Ok(())
 }
 
 pub fn run_line(
@@ -91,7 +112,8 @@ pub fn run_line(
     pattern: &str,
     ksy_source: &str,
     watch: bool,
-) -> Result<String, plog_core::Error> {
+    out: &mut impl Write,
+) -> Result<(), plog_core::Error> {
     let config = AnalysisConfig {
         pattern: pattern.to_string(),
         ksy_source: ksy_source.to_string(),
@@ -102,18 +124,20 @@ pub fn run_line(
         pipeline::start_analysis(file.to_path_buf(), config)?
     };
 
-    let mut out = String::new();
+    // Stream each event to `out` as it arrives instead of accumulating the
+    // whole (potentially multi-hundred-MB) output in memory first: for large
+    // logs this keeps memory bounded and avoids one huge final write.
     for event in rx {
         match event {
-            AnalysisEvent::Packet(pkt) => out.push_str(&format_packet(&pkt)),
-            AnalysisEvent::Warning(w) => out.push_str(&format!("warning: {w}\n")),
-            AnalysisEvent::Error(e) => out.push_str(&format!("error: {e}\n")),
+            AnalysisEvent::Packet(pkt) => write_packet(out, &pkt)?,
+            AnalysisEvent::Warning(w) => writeln!(out, "warning: {w}")?,
+            AnalysisEvent::Error(e) => writeln!(out, "error: {e}")?,
             AnalysisEvent::Done { packets_found } => {
-                out.push_str(&format!("done: {packets_found} packet(s) found\n"));
+                writeln!(out, "done: {packets_found} packet(s) found")?;
             }
         }
     }
-    Ok(out)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -199,7 +223,9 @@ mod tests {
         let path = dir.path().join("data.bin");
         std::fs::write(&path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
 
-        let out = run_binary(&path, "name: test").unwrap();
+        let mut buf = Vec::new();
+        run_binary(&path, "name: test", &mut buf).unwrap();
+        let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("packet #0"));
         assert!(out.contains("raw: de ad be ef"));
     }
@@ -213,7 +239,15 @@ mod tests {
             "PACKET: deadbeef\nnoise\nPACKET: cafebabe\n",
         );
 
-        let out = run_whole(&path, r"PACKET: (?P<hex>[0-9a-fA-F ]+)", "name: test").unwrap();
+        let mut buf = Vec::new();
+        run_whole(
+            &path,
+            r"PACKET: (?P<hex>[0-9a-fA-F ]+)",
+            "name: test",
+            &mut buf,
+        )
+        .unwrap();
+        let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("packet #0"));
         assert!(out.contains("8 bytes"));
         assert!(out.contains("raw: de ad be ef ca fe ba be"));
@@ -228,13 +262,16 @@ mod tests {
             "PACKET: deadbeef\nnoise\nPACKET: cafebabe\n",
         );
 
-        let out = run_line(
+        let mut buf = Vec::new();
+        run_line(
             &path,
             r"PACKET: (?P<hex>[0-9a-fA-F ]+)",
             "name: test",
             false,
+            &mut buf,
         )
         .unwrap();
+        let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("packet #0"));
         assert!(out.contains("packet #1"));
         assert!(out.contains("done: 2 packet(s) found"));
@@ -246,6 +283,7 @@ mod tests {
         let path = dir.path().join("data.bin");
         std::fs::write(&path, [0x01]).unwrap();
 
-        assert!(run_binary(&path, "   ").is_err());
+        let mut buf = Vec::new();
+        assert!(run_binary(&path, "   ", &mut buf).is_err());
     }
 }

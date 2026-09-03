@@ -13,7 +13,8 @@ use crate::{Error, RawPacket};
 /// Create once, reuse for every line.
 pub struct Extractor {
     /// The compiled regex.  Must have a capture group named `hex`
-    /// (or at least capture group 1) that contains the hex payload.
+    /// (or one of [`PAYLOAD_GROUP_ALIASES`], or at least one capture group)
+    /// that contains the hex payload.
     re: Regex,
     /// Name of the capture group holding the hex payload.
     capture_group: CaptureGroup,
@@ -24,21 +25,32 @@ enum CaptureGroup {
     Index(usize),
 }
 
+/// Names, in priority order, recognized as holding the hex payload when no
+/// group is named `hex`. Covers the extractor pattern commonly suggested for
+/// `[timestamp] channel> hex...` style logs, e.g.
+/// `^\[(?<timestamp>[^\]]+)\]\s+(?<channel>\S+)>\s+(?<packet>[0-9A-Fa-f ]+)$`.
+const PAYLOAD_GROUP_ALIASES: &[&str] = &["hex", "packet", "payload", "data"];
+
 impl Extractor {
     /// Build an extractor from a regex pattern.
     ///
     /// The pattern **must** contain either:
-    /// - a named group `(?P<hex>…)` — preferred, or
-    /// - at least one unnamed capture group — group 1 is used.
+    /// - a named group `(?P<hex>…)` (or one of [`PAYLOAD_GROUP_ALIASES`]) — preferred, or
+    /// - at least one capture group — the *last* one is used, since prefix
+    ///   groups like timestamp/channel typically come before the payload.
     ///
     /// The pattern is validated for catastrophic-backtracking heuristics by
     /// the `regex` crate itself (which uses a linear-time NFA engine).
     pub fn new(pattern: &str) -> Result<Self, Error> {
         let re = Regex::new(pattern).map_err(|e| Error::Regex(e.to_string()))?;
-        let capture_group = if re.capture_names().any(|n| n == Some("hex")) {
-            CaptureGroup::Named("hex".to_string())
+        let names: Vec<&str> = re.capture_names().flatten().collect();
+        let capture_group = if let Some(&alias) = PAYLOAD_GROUP_ALIASES
+            .iter()
+            .find(|alias| names.contains(*alias))
+        {
+            CaptureGroup::Named(alias.to_string())
         } else if re.captures_len() > 1 {
-            CaptureGroup::Index(1)
+            CaptureGroup::Index(re.captures_len() - 1)
         } else {
             return Err(Error::Regex(
                 "pattern must have a 'hex' named capture group or at least one capture group"
@@ -50,9 +62,13 @@ impl Extractor {
 
     /// Try to extract a [`RawPacket`] from a single log line.
     ///
-    /// Returns `None` if the line does not match.
+    /// Returns `None` if the line does not match. When the pattern can match
+    /// more than once on the same line (e.g. a generic hex-run pattern with
+    /// no anchors, which can also match a leading numeric timestamp), the
+    /// *last* match is used, since prefix content like timestamps/sequence
+    /// numbers typically precedes the actual payload.
     pub fn extract_from_line<'a>(&self, line: &'a str) -> Option<RawPacket<'a>> {
-        let caps = self.re.captures(line)?;
+        let caps = self.re.captures_iter(line).last()?;
         let hex_str = match &self.capture_group {
             CaptureGroup::Named(name) => caps.name(name)?.as_str(),
             CaptureGroup::Index(i) => caps.get(*i)?.as_str(),
@@ -103,5 +119,27 @@ mod tests {
     #[test]
     fn no_capture_group_errors() {
         assert!(Extractor::new("no_capture").is_err());
+    }
+
+    #[test]
+    fn recognizes_packet_alias_group_name() {
+        // The extractor regex suggested for `[timestamp] channel> hex` logs
+        // names its payload group `packet`, not `hex`.
+        let ext = Extractor::new(
+            r"^\[(?<timestamp>[^\]]+)\]\s+(?<channel>\S+)>\s+(?<packet>[0-9A-Fa-f ]+)$",
+        )
+        .unwrap();
+        let pkt = ext
+            .extract_from_line("[20260908 1939] 1:1> AA 01 10 00")
+            .unwrap();
+        assert_eq!(pkt.hex, "AA 01 10 00");
+    }
+
+    #[test]
+    fn unnamed_groups_use_the_last_one() {
+        // A leading timestamp-like group must not be mistaken for the payload.
+        let ext = Extractor::new(r"(\d+) (\w+) ([0-9a-fA-F]+)").unwrap();
+        let pkt = ext.extract_from_line("20260908 tag deadbeef").unwrap();
+        assert_eq!(pkt.hex, "deadbeef");
     }
 }

@@ -1,3 +1,4 @@
+use std::io::{BufWriter, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -26,18 +27,26 @@ fn main() -> ExitCode {
         m => m,
     };
 
+    // Rust's stdout is line-buffered even when redirected to a file/pipe, so
+    // writing millions of lines directly to it means millions of flush
+    // syscalls. Wrap it in a large `BufWriter` so output is batched instead.
+    let stdout = std::io::stdout();
+    let mut out = BufWriter::with_capacity(1024 * 1024, stdout.lock());
+
     let result = match mode {
-        Mode::Binary => run_binary(&cli.file, &ksy_source),
-        Mode::Whole => run_whole(&cli.file, &cli.pattern, &ksy_source),
-        Mode::Line => run_line(&cli.file, &cli.pattern, &ksy_source, cli.watch),
+        Mode::Binary => run_binary(&cli.file, &ksy_source, &mut out),
+        Mode::Whole => run_whole(&cli.file, &cli.pattern, &ksy_source, &mut out),
+        Mode::Line => run_line(&cli.file, &cli.pattern, &ksy_source, cli.watch, &mut out),
         Mode::Auto => unreachable!("resolved above"),
     };
 
+    if let Err(e) = out.flush() {
+        eprintln!("error: could not flush output: {e}");
+        return ExitCode::FAILURE;
+    }
+
     match result {
-        Ok(output) => {
-            print!("{output}");
-            ExitCode::SUCCESS
-        }
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e}");
             ExitCode::FAILURE

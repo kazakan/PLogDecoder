@@ -26,6 +26,7 @@ pub mod decoder;
 pub mod extractor;
 pub mod filekind;
 pub mod hex;
+pub mod ksy;
 pub mod pipeline;
 pub mod result;
 

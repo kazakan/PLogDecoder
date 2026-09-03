@@ -5,28 +5,27 @@
 /// [`DecoderCache`] can be reused for all packets that share the same protocol.
 use std::collections::HashMap;
 
+use crate::ksy::KsySchema;
 use crate::{result::DecodedPacket, result::Value, Error};
 
-/// A handle to a prepared protocol decoder.
-///
-/// In a real implementation this would hold a compiled Kaitai schema or a
-/// similar structure.  Here we use a lightweight stub that simply records the
-/// KSY source for illustration purposes while the cache / reuse machinery is
-/// fully wired up.
+/// A handle to a prepared protocol decoder, backed by a parsed KSY schema.
 pub struct Decoder {
-    /// The KSY YAML source that was used to create this decoder.
-    #[allow(dead_code)]
-    ksy_source: String,
+    schema: KsySchema,
 }
 
 impl Decoder {
     /// Decode raw bytes into a [`DecodedPacket`].
     ///
-    /// This stub produces a single `raw` field containing the byte sequence.
-    /// A real implementation would apply the Kaitai-compiled schema here.
+    /// Schemas with no `seq` fields (e.g. minimal/placeholder KSYs) fall back
+    /// to a single `raw` field containing the whole byte sequence.
     pub fn decode(&self, index: u64, raw_bytes: Vec<u8>) -> Result<DecodedPacket, Error> {
-        let mut fields = HashMap::new();
-        fields.insert("raw".to_string(), Value::Bytes(raw_bytes.clone()));
+        let fields = if self.schema.is_empty() {
+            let mut fields = indexmap::IndexMap::new();
+            fields.insert("raw".to_string(), Value::Bytes(raw_bytes.clone()));
+            fields
+        } else {
+            self.schema.decode(&raw_bytes)?
+        };
         Ok(DecodedPacket {
             index,
             raw_bytes,
@@ -76,14 +75,17 @@ impl Default for DecoderCache {
     }
 }
 
-fn prepare_decoder(ksy_source: &str) -> Result<Decoder, Error> {
-    // Validate that the source is non-empty in this stub.
+/// Prepare a standalone [`Decoder`] without going through a [`DecoderCache`].
+///
+/// Used by the parallel/chunked pipeline, where each worker thread shares one
+/// `Arc<Decoder>` instead of a per-thread cache (the KSY schema only needs to
+/// be parsed once regardless of how many threads decode packets with it).
+pub fn prepare_decoder(ksy_source: &str) -> Result<Decoder, Error> {
     if ksy_source.trim().is_empty() {
         return Err(Error::Protocol("KSY source is empty".to_string()));
     }
-    Ok(Decoder {
-        ksy_source: ksy_source.to_string(),
-    })
+    let schema = KsySchema::parse(ksy_source)?;
+    Ok(Decoder { schema })
 }
 
 /// FNV-1a 64-bit hash — extremely fast, good enough for cache keys.
@@ -112,8 +114,8 @@ mod tests {
     #[test]
     fn different_ksy_new_decoder() {
         let mut cache = DecoderCache::new();
-        let _d1 = cache.get_or_prepare("ksy_a").unwrap();
-        let _d2 = cache.get_or_prepare("ksy_b").unwrap();
+        let _d1 = cache.get_or_prepare("name: a").unwrap();
+        let _d2 = cache.get_or_prepare("name: b").unwrap();
         assert_eq!(cache.inner.len(), 2);
     }
 

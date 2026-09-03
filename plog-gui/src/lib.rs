@@ -63,6 +63,7 @@ pub struct App {
     packets: Vec<DecodedPacket>,
     messages: Vec<String>,
     job: Option<Job>,
+    selected_packet: Option<usize>,
 }
 
 impl Default for App {
@@ -76,6 +77,7 @@ impl Default for App {
             packets: Vec::new(),
             messages: Vec::new(),
             job: None,
+            selected_packet: None,
         }
     }
 }
@@ -107,6 +109,7 @@ impl App {
     pub fn start(&mut self) {
         self.packets.clear();
         self.messages.clear();
+        self.selected_packet = None;
 
         let (Some(file), Some(ksy_path)) = (self.file.clone(), self.ksy.clone()) else {
             self.messages
@@ -281,23 +284,50 @@ impl eframe::App for App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for pkt in &self.packets {
-                    ui.group(|ui| {
-                        ui.label(format!(
-                            "packet #{} ({} bytes)",
-                            pkt.index,
-                            pkt.raw_bytes.len()
-                        ));
-                        let mut keys: Vec<&String> = pkt.fields.keys().collect();
-                        keys.sort();
-                        for key in keys {
-                            ui.label(format!("{key}: {}", pkt.fields[key].display()));
+            // With large logs (tens/hundreds of thousands of packets), laying
+            // out a `ui.group` + one label per field for *every* packet on
+            // *every* frame makes the UI thread do O(total packets) work per
+            // repaint, regardless of what's actually visible - that's what
+            // caused the lag. `show_rows` only builds widgets for the rows
+            // that are actually scrolled into view, so cost stays bounded by
+            // viewport height instead of by log size. Each row is rendered as
+            // a single fixed-height summary line to keep row height uniform,
+            // which `show_rows` requires for its viewport math; expanding a
+            // packet still shows all of its fields (only when selected).
+            let row_height = ui.text_style_height(&egui::TextStyle::Body);
+            let total = self.packets.len();
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show_rows(ui, row_height, total, |ui, row_range| {
+                    for i in row_range {
+                        let pkt = &self.packets[i];
+                        let selected = self.selected_packet == Some(i);
+                        let summary: String = pkt
+                            .fields
+                            .iter()
+                            .map(|(k, v)| format!("{k}={}", v.display()))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        let text =
+                            format!("#{} ({} bytes): {summary}", pkt.index, pkt.raw_bytes.len());
+                        if ui.selectable_label(selected, text).clicked() {
+                            self.selected_packet = if selected { None } else { Some(i) };
+                        }
+                    }
+                });
+        });
+
+        if let Some(i) = self.selected_packet {
+            if let Some(pkt) = self.packets.get(i) {
+                egui::Window::new(format!("packet #{}", pkt.index))
+                    .id(egui::Id::new("packet-detail"))
+                    .show(ctx, |ui| {
+                        for (key, value) in &pkt.fields {
+                            ui.label(format!("{key}: {}", value.display()));
                         }
                     });
-                }
-            });
-        });
+            }
+        }
     }
 }
 
