@@ -91,7 +91,7 @@ fn bench_pipeline(c: &mut Criterion) {
     let packet_hex = make_hex_string(64); // 64-byte packets
 
     // Build log variants: 1 000 lines and 10 000 lines
-    for line_count in [1_000usize, 10_000] {
+    for line_count in [1_000usize, 10_000, 200_000] {
         let mut f = NamedTempFile::new().unwrap();
         for i in 0..line_count {
             if i % 5 == 0 {

@@ -2,7 +2,7 @@
 ///
 /// Values are stored in their natural types and converted to display strings
 /// only when needed, to avoid unnecessary allocations.
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 /// A single decoded value from a protocol field.
 #[derive(Debug, Clone, PartialEq)]
@@ -14,7 +14,8 @@ pub enum Value {
     Bytes(Vec<u8>),
     Str(String),
     Array(Vec<Value>),
-    Struct(HashMap<String, Value>),
+    /// A nested struct, preserving the field declaration order (as in a KSY `seq`).
+    Struct(IndexMap<String, Value>),
     Null,
 }
 
@@ -60,8 +61,8 @@ pub struct DecodedPacket {
     pub index: u64,
     /// Raw bytes that were decoded.
     pub raw_bytes: Vec<u8>,
-    /// Decoded fields.
-    pub fields: HashMap<String, Value>,
+    /// Decoded fields, in declaration order (as in the KSY `seq`).
+    pub fields: IndexMap<String, Value>,
 }
 
 #[cfg(test)]
